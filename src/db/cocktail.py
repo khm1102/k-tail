@@ -69,3 +69,11 @@ Coctail Delete
 
 def coctail_delete():
   return 0
+
+"""
+Coctail where
+"""
+
+def coctail_name_where(name : str):
+    query = """
+    """
