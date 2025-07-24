@@ -67,6 +67,3 @@ def delete_admin(name: str):
 
 
 conn.close()
-
-
-3294619

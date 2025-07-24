@@ -1,14 +1,15 @@
-# 테스트 코드, 아직 사용하지 않음.
+"""
+정제된 csv 데이터를 db에 저장합니다.
+"""
 
+from src.db.conn import db_connect
 import pandas as pd
-import sqlite3
 
 def load_csv_to_sqlite(csv_path: str):
     df = pd.read_csv(csv_path, encoding='utf-8')
     df.columns = [col.strip() for col in df.columns]
 
-    db_path = "dev.db"
-    conn = sqlite3.connect(db_path)
+    conn = db_connect()
     cursor = conn.cursor()
 
 
@@ -45,7 +46,8 @@ def load_csv_to_sqlite(csv_path: str):
 
     conn.commit()
     conn.close()
-    print(f"✅ '{db_path}'에 {len(df)}개의 칵테일 정보를 저장했습니다.")
+    print(f"{len(df)} 저장.")
 
-if __name__ == "__main__":
-    load_csv_to_sqlite("cocktails.csv")
+
+
+load_csv_to_sqlite("cocktails.csv")
