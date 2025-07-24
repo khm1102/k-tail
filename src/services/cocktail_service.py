@@ -46,6 +46,26 @@ class CocktailService:
 
         return cocktails
 
+    def get_all_cocktails_dict(self) -> Dict[str, Dict]:
+        """DB에서 모든 칵테일 정보를 받아와서 딕셔너리로 반환합니다."""
+        rows = cocktail_select()
+        
+        cocktails_dict = {}
+        for row in rows:
+            cocktail_name = row[0]
+            if cocktail_name:
+                cocktails_dict[cocktail_name] = {
+                    'name': row[0],
+                    'ingredients': row[1] if row[1] else 'N/A',
+                    'garnish': row[2] if row[2] else 'N/A',
+                    'glassware': row[3] if row[3] else 'N/A',
+                    'preparation': row[4] if row[4] else 'N/A',
+                    'price': row[5] if row[5] is not None else 0.0,
+                    'note': row[6] if row[6] else 'N/A'
+                }
+        
+        return cocktails_dict
+
     def _clean_ingredients(self, ingredients: str) -> str:
         """재료 문자열을 정리합니다."""
         if not ingredients:
