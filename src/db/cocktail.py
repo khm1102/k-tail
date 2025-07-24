@@ -1,5 +1,4 @@
-import sqlite3
-from db.conn import db_connect
+from conn import db_connect
 
 conn = db_connect()
 cur = conn.cursor()
@@ -19,7 +18,7 @@ def cockail_create():
     price REAL NOT NULL,
     note TEXT
 );
-  """
+"""
   
   cur.execute(query)
 
@@ -32,11 +31,12 @@ Cocktail Select
 """
 
 def cocktail_select():
-  query = """
-  select * from cockail;
-  """
-  
-  cur.execute(query)
+    query = """
+    select * from Cocktail;
+    """
+    cur.execute(query)
+    result = cur.fetchall()
+    return result
 
 
 """
@@ -69,8 +69,3 @@ Coctail Delete
 
 def coctail_delete():
   return 0
-
-
-"""
-
-"""
