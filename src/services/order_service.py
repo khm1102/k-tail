@@ -19,10 +19,17 @@ class OrderService:
     def __init__(self):
         self.conn = db_connect()
         self.cursor = self.conn.cursor()
-        self.orders_csv_path = os.path.join(
+        
+        # data 폴더 경로 설정
+        data_dir = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 
-            "orders.csv"
+            "data"
         )
+        
+        # data 폴더가 없으면 생성
+        os.makedirs(data_dir, exist_ok=True)
+        
+        self.orders_csv_path = os.path.join(data_dir, "orders.csv")
 
     def find_cocktail_ingredients(self, cocktail_name: str) -> Optional[str]:
         """칵테일 이름으로 재료를 찾습니다."""
@@ -118,5 +125,3 @@ def place_order_from_gui(cocktail_name: str, quantity: int = 1) -> bool:
 if __name__ == "__main__":
     # 임시 데모
     demo()
-    
-    success = place_order_from_gui("The Happy Place", 2)
