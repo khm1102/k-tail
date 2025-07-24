@@ -1,9 +1,13 @@
 import customtkinter as ctk
 import sys, os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import random
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(current_dir))
+sys.path.insert(0, project_root)
+
 from src.services.cocktail_service import CocktailService
 from src.services.order_service import OrderService
-import random
 
 # 테마 및 색상 정의
 ctk.set_appearance_mode("dark")
@@ -19,8 +23,20 @@ ERROR_COLOR  = "#d9534f"
 SUCCESS_COLOR = "#4ecf8c"
 WARNING_COLOR = "#ffb84e"
 
-cocktail_service = CocktailService()
-ALL_MENUS = cocktail_service.get_all_cocktails()
+# 전역 변수들
+cocktail_service = None
+ALL_MENUS = []
+
+def initialize_services():
+    """서비스 초기화 함수"""
+    global cocktail_service, ALL_MENUS
+    try:
+        cocktail_service = CocktailService()
+        ALL_MENUS = cocktail_service.get_all_cocktails()
+        return True
+    except Exception as e:
+        print(f"서비스 초기화 오류: {e}")
+        return False
 
 # 가격 문자열을 float(달러 단위)로 변환하는 함수
 def parse_price(price_str):
@@ -628,7 +644,11 @@ class MenuTab(ctk.CTkFrame):
         self.on_delete = on_delete
         self._search_var = ctk.StringVar()
         # DB에서 메뉴 불러오기
-        self._all_menus = cocktail_service.get_all_cocktails()
+        global cocktail_service
+        if cocktail_service:
+            self._all_menus = cocktail_service.get_all_cocktails()
+        else:
+            self._all_menus = []
         self._filtered_menus = self._all_menus.copy()
         self._current_page = 0
         self._build()
@@ -820,6 +840,14 @@ class DetailFrame(ctk.CTkFrame):
 class App(ctk.CTk):
     def __init__(self):
         super().__init__()
+        
+        # 서비스 초기화
+        if not initialize_services():
+            # 초기화 실패 시 기본값으로 설정
+            global ALL_MENUS
+            ALL_MENUS = []
+            print("서비스 초기화에 실패했습니다. 기본값으로 실행합니다.")
+        
         self.fonts = {
             'head': ctk.CTkFont(size=18, weight="bold"),
             'item': ctk.CTkFont(size=14),
