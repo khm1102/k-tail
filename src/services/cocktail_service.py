@@ -15,7 +15,7 @@ from difflib import SequenceMatcher
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.db.conn import db_connect
-from src.db.cocktail import cocktail_select, coctail_insert, cockail_create
+from src.db.cocktail import cocktail_select, coctail_insert
 
 
 class CocktailService:
@@ -25,7 +25,6 @@ class CocktailService:
         """
         self.conn = db_connect()
         self.cursor = self.conn.cursor()
-        cockail_create()  # 이미 정의된 테이블 생성 함수 사용
 
     def get_all_cocktails(self) -> List[Dict]:
         """모든 칵테일을 반환합니다."""
@@ -45,26 +44,6 @@ class CocktailService:
             cocktails.append(cocktail)
 
         return cocktails
-
-    def get_all_cocktails_dict(self) -> Dict[str, Dict]:
-        """DB에서 모든 칵테일 정보를 받아와서 딕셔너리로 반환합니다."""
-        rows = cocktail_select()
-        
-        cocktails_dict = {}
-        for row in rows:
-            cocktail_name = row[0]
-            if cocktail_name:
-                cocktails_dict[cocktail_name] = {
-                    'name': row[0],
-                    'ingredients': row[1] if row[1] else 'N/A',
-                    'garnish': row[2] if row[2] else 'N/A',
-                    'glassware': row[3] if row[3] else 'N/A',
-                    'preparation': row[4] if row[4] else 'N/A',
-                    'price': row[5] if row[5] is not None else 0.0,
-                    'note': row[6] if row[6] else 'N/A'
-                }
-        
-        return cocktails_dict
 
     def _clean_ingredients(self, ingredients: str) -> str:
         """재료 문자열을 정리합니다."""
