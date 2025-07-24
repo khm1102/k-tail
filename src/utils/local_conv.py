@@ -1,6 +1,4 @@
 from src.db.cocktail import *
-import csv
-
 
 print(cocktail_select())
 

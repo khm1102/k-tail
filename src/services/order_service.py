@@ -41,6 +41,15 @@ class OrderService:
             return row[0]
         return None
 
+    def find_cocktail_preparation(self, cocktail_name: str) -> Optional[str]:
+        """칵테일 이름으로 레시피를 찾습니다."""
+        query = "SELECT preparation FROM Cocktail WHERE LOWER(name) = LOWER(?)"
+        self.cursor.execute(query, (cocktail_name.strip(),))
+        row = self.cursor.fetchone()
+        if row and row[0]:
+            return row[0]
+        return None
+
     def save_order(self, cocktail_name: str, quantity: int = 1):
         """주문을 CSV에 저장합니다."""
         ingredients = self.find_cocktail_ingredients(cocktail_name)
@@ -62,37 +71,32 @@ class OrderService:
                 if ingredient:
                     writer.writerow([f"-- {ingredient}"])
 
-    def process_gui_order(self, cocktail_name: str, quantity: int = 1) -> bool:
+    def process_gui_order(self, cocktail_name: str, quantity: int = 1, request: str = "", order_time: str = None) -> bool:
         """
         GUI에서 호출할 주문 처리 함수
-        
         Args:
             cocktail_name: GUI에서 받아온 칵테일 이름
             quantity: 주문 수량 (기본값: 1)
-            
+            request: 사용자가 입력한 요청사항 (기본값: "")
+            order_time: 주문 시간(타임스탬프), 없으면 현재 시간
         Returns:
             주문 처리 성공 여부
         """
         ingredients = self.find_cocktail_ingredients(cocktail_name)
-        
+        preparation = self.find_cocktail_preparation(cocktail_name)
         if not ingredients:
             return False
-        
-        order_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
-        # CSV에 저장
+        order_date = order_time if order_time else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(self.orders_csv_path, 'a', newline='', encoding='utf-8') as csvfile:
             writer = csv.writer(csvfile)
-            
-            # 주문 정보
-            writer.writerow([order_date, cocktail_name, quantity])
-            
-            # 재료들을 개별 행으로 저장
-            ingredient_list = [ing.strip() for ing in ingredients.split(',')]
-            for ingredient in ingredient_list:
-                if ingredient:
-                    writer.writerow([f"-- {ingredient}"])
-        
+            for _ in range(quantity):
+                writer.writerow([
+                    order_date,
+                    cocktail_name,
+                    ingredients,
+                    preparation if preparation else "",
+                    request if request else ""
+                ])
         return True
 
     def __del__(self):

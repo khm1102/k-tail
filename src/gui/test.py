@@ -4,7 +4,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.services.cocktail_service import CocktailService
 from src.services.order_service import OrderService
 import random
-import csv
 
 # 테마 및 색상 정의
 ctk.set_appearance_mode("dark")
@@ -191,14 +190,13 @@ class MenuCard(ctk.CTkFrame):
 
 # --- 장바구니 리스트 아이템 (수정된 부분) ---
 class CartListItem(ctk.CTkFrame):
-    def __init__(self, parent, item, qty, fonts, on_qty_change, on_remove, req_text=None, on_req_change=None):
+    def __init__(self, parent, item, qty, fonts, on_qty_change, on_remove):
         super().__init__(parent, fg_color=CARD_COLOR, corner_radius=8, border_width=1, border_color="#333333")
         self.item = item
         self.fonts = fonts
         self.on_qty_change = on_qty_change
         self.on_remove = on_remove
         self.qty = ctk.IntVar(value=qty)
-        self.on_req_change = on_req_change
 
         self.columnconfigure(0, weight=3, minsize=180)
         self.columnconfigure(1, weight=1, minsize=80)
@@ -246,15 +244,6 @@ class CartListItem(ctk.CTkFrame):
         # 수량이 바뀔 때마다 합계 가격 갱신
         self.qty.trace_add("write", lambda *args: self._update_total_price(unit_price))
 
-        # 삭제 버튼 아래에 요구사항 입력란 추가
-        self.req_text = ctk.StringVar(value=req_text if req_text is not None else "")
-        req_label = ctk.CTkLabel(self, text="요구사항", font=fonts['small'], text_color=ACCENT_COLOR, anchor="w")
-        req_label.grid(row=1, column=0, sticky="w", padx=(16,0), pady=(0,2), columnspan=2)
-        self.req_entry = ctk.CTkTextbox(self, height=36, font=fonts['small'])
-        self.req_entry.insert("1.0", self.req_text.get())
-        self.req_entry.grid(row=2, column=0, columnspan=5, sticky="ew", padx=(16,8), pady=(0,8))
-        self.req_entry.bind("<KeyRelease>", self._on_req_change)
-
     def _update_total_price(self, unit_price):
         total = unit_price * self.qty.get()
         # 달러 표기, 소수점 2자리, 1000단위 콤마
@@ -276,15 +265,9 @@ class CartListItem(ctk.CTkFrame):
     def _remove_item(self):
         self.on_remove(self.item)
 
-    def _on_req_change(self, event=None):
-        text = self.req_entry.get("1.0", "end").strip()
-        self.req_text.set(text)
-        if self.on_req_change:
-            self.on_req_change(self.item, text)
-
 # --- 장바구니 탭 (수정된 부분) ---
 class CartListTab(ctk.CTkFrame):
-    def __init__(self, parent, fonts, cart, on_qty_change=None, on_remove=None, on_purchase=None, reqs=None, on_req_change=None, padding=PADDING):
+    def __init__(self, parent, fonts, cart, on_qty_change=None, on_remove=None, on_purchase=None, padding=PADDING):
         super().__init__(parent, fg_color=BG_COLOR)
         self.fonts = fonts
         self.cart = cart
@@ -292,8 +275,6 @@ class CartListTab(ctk.CTkFrame):
         self.on_qty_change = on_qty_change
         self.on_remove = on_remove
         self.on_purchase = on_purchase
-        self.reqs = reqs if reqs is not None else {}
-        self.on_req_change = on_req_change
 
         # 내부 스크롤 프레임
         self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color=BG_COLOR)
@@ -307,12 +288,10 @@ class CartListTab(ctk.CTkFrame):
         self.button_frame = ctk.CTkFrame(self, fg_color=BG_COLOR)
         self.button_frame.pack(fill="x", side="bottom", padx=0, pady=(0, 8), anchor="se")
 
-        # 구매하기 버튼 hover_color 강조
         self.purchase_btn = ctk.CTkButton(
             self.button_frame,
             text="구매하기",
             fg_color=ACCENT_COLOR,
-            hover_color=SUCCESS_COLOR,  # hover 시 초록
             corner_radius=8,
             font=self.fonts['head'],
             width=180,
@@ -341,16 +320,13 @@ class CartListTab(ctk.CTkFrame):
                 item = {"name": name, "desc": "", "price": ""}
             unit_price = parse_price(item.get('price', '0'))
             total_sum += unit_price * qty
-            req_text = self.reqs.get(name, "")
             row_frame = CartListItem(
                 self.scroll_frame,
                 item,
                 qty,
                 self.fonts,
                 on_qty_change=self.on_qty_change if self.on_qty_change else lambda i, q: None,
-                on_remove=self.on_remove if self.on_remove else lambda i: None,
-                req_text=req_text,
-                on_req_change=self.on_req_change if self.on_req_change else None
+                on_remove=self.on_remove if self.on_remove else lambda i: None
             )
             row_frame.grid(row=idx, column=0, sticky="ew", padx=4, pady=4)
             self.scroll_frame.grid_rowconfigure(idx, weight=0)
@@ -407,7 +383,6 @@ class RecommendTab(ctk.CTkFrame):
         self.fonts = fonts
         self.cart_callback = cart_callback
         self._build()
-        self._add_fab()
 
     def _build(self):
         all_menus = ALL_MENUS.copy()
@@ -431,127 +406,6 @@ class RecommendTab(ctk.CTkFrame):
                 card.grid(row=row, column=col, padx=8, pady=8, sticky="nsew")
             for c in range(columns):
                 sec.grid_columnconfigure(c, weight=1)
-
-    def _add_fab(self):
-        # 플로팅 버튼(우측 하단)
-        fab = ctk.CTkButton(
-            self,
-            text="💬",
-            width=56,
-            height=56,
-            fg_color=ACCENT_COLOR,
-            text_color="#fff",
-            font=ctk.CTkFont(size=28, weight="bold"),
-            corner_radius=28,
-            hover_color="#6eaaff",  # 더 밝은 파랑
-            border_width=2,
-            border_color="#fff",
-            command=self._on_fab_click
-        )
-        fab.place(relx=1.0, rely=1.0, anchor="se", x=-24, y=-24)
-
-    def _on_fab_click(self):
-        self._show_fadein_toast("무엇을 도와드릴까요?", next_callback=self._show_helper_popup)
-
-    def _show_fadein_toast(self, message, duration=1000, next_callback=None):
-        # 하단 중앙에 페이드인/아웃 토스트
-        toast = ctk.CTkToplevel(self)
-        toast.overrideredirect(True)
-        toast.attributes('-topmost', True)
-        toast.configure(bg=BG_COLOR)
-        w, h = 340, 60
-        self.update_idletasks()
-        px = self.winfo_rootx()
-        py = self.winfo_rooty()
-        pw = self.winfo_width()
-        ph = self.winfo_height()
-        x = px + (pw - w) // 2
-        y = py + ph - h - 48
-        toast.geometry(f"{w}x{h}+{x}+{y}")
-        frame = ctk.CTkFrame(toast, fg_color=CARD_COLOR, corner_radius=12, border_width=0)
-        frame.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.98, relheight=0.92)
-        ctk.CTkLabel(
-            frame,
-            text=message,
-            font=ctk.CTkFont(size=15, weight="bold"),
-            fg_color="transparent",
-            text_color=ACCENT_COLOR,
-            anchor="center",
-            wraplength=w-40,
-            justify="center"
-        ).pack(expand=True, fill="both", padx=12, pady=8)
-        # 페이드인
-        def fade_in(step=0):
-            alpha = min(1.0, step / 8)
-            toast.attributes("-alpha", alpha)
-            if alpha < 1.0:
-                toast.after(20, fade_in, step + 1)
-            else:
-                toast.after(duration, fade_out)
-        def fade_out(step=8):
-            alpha = max(0.0, step / 8)
-            toast.attributes("-alpha", alpha)
-            if alpha > 0.0:
-                toast.after(20, fade_out, step - 1)
-            else:
-                toast.destroy()
-                if next_callback:
-                    self.after(100, next_callback)
-        toast.attributes("-alpha", 0.0)
-        fade_in()
-
-    def _show_helper_popup(self):
-        # 하단 중앙에 페이드인 팝업 + 버튼 2개
-        popup = ctk.CTkToplevel(self)
-        popup.overrideredirect(True)
-        popup.attributes('-topmost', True)
-        popup.configure(bg=BG_COLOR)
-        w, h = 360, 120
-        self.update_idletasks()
-        px = self.winfo_rootx()
-        py = self.winfo_rooty()
-        pw = self.winfo_width()
-        ph = self.winfo_height()
-        x = px + (pw - w) // 2
-        y = py + ph - h - 48
-        popup.geometry(f"{w}x{h}+{x}+{y}")
-        frame = ctk.CTkFrame(popup, fg_color=CARD_COLOR, corner_radius=12, border_width=0)
-        frame.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.98, relheight=0.92)
-        ctk.CTkLabel(
-            frame,
-            text="원하시는 칵테일을 찾아드릴까요?",
-            font=ctk.CTkFont(size=15, weight="bold"),
-            fg_color="transparent",
-            text_color=ACCENT_COLOR,
-            anchor="center",
-            wraplength=w-40,
-            justify="center"
-        ).pack(pady=(14, 2), padx=12)
-        btns = ctk.CTkFrame(frame, fg_color="transparent")
-        btns.pack(pady=(2, 10))
-        def on_yes():
-            popup.destroy()
-            app = self.winfo_toplevel()
-            if hasattr(app, 'tabview'):
-                try:
-                    app.tabview.set("추천")
-                except Exception:
-                    pass
-        def on_no():
-            popup.destroy()
-            app = self.winfo_toplevel()
-            if hasattr(app, '_show_toast'):
-                app._show_toast("언제든 불러주세요!")
-        ctk.CTkButton(btns, text="Yes", fg_color=ACCENT_COLOR, corner_radius=6, width=100, command=on_yes).pack(side="left", padx=8)
-        ctk.CTkButton(btns, text="No", fg_color="#444444", corner_radius=6, width=100, command=on_no).pack(side="left", padx=8)
-        # 페이드인 애니메이션
-        def fade_in(step=0):
-            alpha = min(1.0, step / 8)
-            popup.attributes("-alpha", alpha)
-            if alpha < 1.0:
-                popup.after(20, fade_in, step + 1)
-        popup.attributes("-alpha", 0.0)
-        fade_in()
 
 # 전체메뉴 UI: 한줄 리스트 형식 (정렬 개선)
 class MenuListItem(ctk.CTkFrame):
@@ -757,16 +611,13 @@ class MenuTab(ctk.CTkFrame):
             search_frame,
             textvariable=self._search_var,
             placeholder_text="메뉴명으로 검색...",
-            width=320,
-            border_width=2,
-            border_color=ACCENT_COLOR
+            width=320
         )
         self.search_entry.pack(side="left", fill="x", expand=True)
         ctk.CTkButton(
             search_frame,
             text="검색",
             fg_color=ACCENT_COLOR,
-            hover_color="#6eaaff",
             corner_radius=6,
             command=self._on_search
         ).pack(side="left", padx=8)
@@ -876,35 +727,44 @@ class MenuTab(ctk.CTkFrame):
         super().destroy()
 
     def _draw_admin_request_dropdowns(self):
-        # orders.csv에서 주문 시간별로 묶어서 읽기
-        orders = self._load_orders_grouped()
+        # 예시 데이터: 주문별로 여러 칵테일 요청이 있을 수 있음
+        orders = [
+            {
+                "order_id": 1,
+                "user": "홍길동",
+                "cocktails": [
+                    {
+                        "cocktail": "모히또",
+                        "ingredients": "럼, 라임, 민트, 설탕, 탄산수",
+                        "recipe": "1. 라임과 설탕을 으깨고 민트와 럼을 넣고 섞은 뒤 탄산수 추가",
+                        "request": "민트 많이 넣어주세요."
+                    },
+                    {
+                        "cocktail": "마가리타",
+                        "ingredients": "데킬라, 라임, 트리플섹, 소금",
+                        "recipe": "1. 재료를 셰이커에 넣고 흔든 뒤 소금 테두리 잔에 붓기",
+                        "request": "소금 테두리 빼주세요."
+                    }
+                ]
+            },
+            {
+                "order_id": 2,
+                "user": "이영희",
+                "cocktails": [
+                    {
+                        "cocktail": "블루라군",
+                        "ingredients": "보드카, 블루큐라소, 레몬에이드",
+                        "recipe": "1. 보드카와 블루큐라소를 섞고 레몬에이드 추가",
+                        "request": "얼음 없이 부탁해요."
+                    }
+                ]
+            }
+        ]
         outer = ctk.CTkScrollableFrame(self, fg_color=CARD_COLOR, corner_radius=12, border_width=0, height=320)
         outer.pack(fill="x", padx=32, pady=(0, 24))
         ctk.CTkLabel(outer, text="주문 요청사항 목록", font=self.fonts['head'], text_color=ACCENT_COLOR, anchor="w").pack(anchor="w", padx=16, pady=(16, 8))
-        for idx, (order_time, cocktails) in enumerate(orders, 1):
-            OrderDropdownCard(outer, {"order_id": idx, "order_time": order_time, "cocktails": cocktails}, self.fonts).pack(fill="x", padx=12, pady=6)
-
-    def _load_orders_grouped(self):
-        # orders.csv에서 [order_time, name, ingredients, preparation, request] 읽어서 주문 시간별로 묶음
-        import os
-        orders_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "orders.csv")
-        grouped = {}
-        if not os.path.exists(orders_path):
-            return []
-        with open(orders_path, newline='', encoding='utf-8') as f:
-            reader = csv.reader(f)
-            for row in reader:
-                if len(row) < 5:
-                    continue
-                order_time, name, ingredients, preparation, request = row[:5]
-                grouped.setdefault(order_time, []).append({
-                    "cocktail": name,
-                    "ingredients": ingredients,
-                    "recipe": preparation,
-                    "request": request
-                })
-        # 최신 주문이 위로 오도록 정렬
-        return sorted(grouped.items(), key=lambda x: x[0], reverse=True)
+        for order in orders:
+            OrderDropdownCard(outer, order, self.fonts).pack(fill="x", padx=12, pady=6)
 
 class OrderDropdownCard(ctk.CTkFrame):
     def __init__(self, parent, order, fonts):
@@ -920,7 +780,7 @@ class OrderDropdownCard(ctk.CTkFrame):
         top.pack(fill="x", padx=0, pady=0)
         self.toggle_btn = ctk.CTkButton(
             top,
-            text=f"주문 {self.order['order_id']} ({self.order['order_time']}) ▼",
+            text=f"주문 {self.order['order_id']} (by {self.order['user']}) ▼",
             font=self.fonts['item'],
             fg_color=ACCENT_COLOR,
             corner_radius=6,
@@ -933,14 +793,14 @@ class OrderDropdownCard(ctk.CTkFrame):
         if self.expanded:
             if self.inner:
                 self.inner.destroy()
-            self.toggle_btn.configure(text=f"주문 {self.order['order_id']} ({self.order['order_time']}) ▼")
+            self.toggle_btn.configure(text=f"주문 {self.order['order_id']} (by {self.order['user']}) ▼")
             self.expanded = False
         else:
             self.inner = ctk.CTkFrame(self, fg_color="#23232a")
             self.inner.pack(fill="x", padx=8, pady=(0, 8))
             for c in self.order['cocktails']:
-                DropdownRequestCard(self.inner, c, self.fonts).pack(fill="x", padx=0, pady=4)
-            self.toggle_btn.configure(text=f"주문 {self.order['order_id']} ({self.order['order_time']}) ▲")
+                DropdownRequestCard(self.inner, {**c, "user": self.order['user']}, self.fonts).pack(fill="x", padx=0, pady=4)
+            self.toggle_btn.configure(text=f"주문 {self.order['order_id']} (by {self.order['user']}) ▲")
             self.expanded = True
 
 class DropdownRequestCard(ctk.CTkFrame):
@@ -1008,7 +868,6 @@ class App(ctk.CTk):
         self.geometry("640x840")
         self.configure(fg_color=BG_COLOR)
         self.cart = {}
-        self.cart_reqs = {}  # 제품별 요구사항 저장
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -1018,18 +877,7 @@ class App(ctk.CTk):
         self.main_frame   = ctk.CTkFrame(self, fg_color=BG_COLOR)
         self.detail_frame = DetailFrame(self, self.fonts, self._show_main)
 
-        # 탭뷰 스타일 강조
-        self.tabview = ctk.CTkTabview(
-            self.main_frame,
-            width=600,
-            corner_radius=12,
-            fg_color=BG_COLOR,
-            segmented_button_fg_color="#444444",  # 테두리도 회색
-            segmented_button_selected_color="#444444",  # 회색
-            segmented_button_unselected_color="#222",
-            segmented_button_selected_hover_color="#444444",  # 회색
-            segmented_button_unselected_hover_color="#333"
-        )
+        self.tabview = ctk.CTkTabview(self.main_frame, width=600)
         self.tabview.pack(fill="both", expand=True, padx=PADDING, pady=PADDING)
         self.tabs = {}
         self._setup_tabs()
@@ -1041,7 +889,7 @@ class App(ctk.CTk):
         if self.is_admin:
             tab_names = ["전체메뉴", "장바구니", "요청사항"]
         else:
-            tab_names = ["인기", "전체메뉴", "추천", "장바구니"]
+            tab_names = ["인기", "전체메뉴", "추천", "장바구니", "요청사항"]
         for name in tab_names:
             self.tabview.add(name)
         # 기본 선택 탭
@@ -1076,15 +924,15 @@ class App(ctk.CTk):
             self.cart,
             on_qty_change=self._on_cart_qty_change,
             on_remove=self._on_cart_remove,
-            on_purchase=self._on_purchase,
-            reqs=self.cart_reqs,
-            on_req_change=self._on_cart_req_change
+            on_purchase=self._on_purchase
         )
         self.tabs["장바구니"].pack(fill="both", expand=True, padx=PADDING, pady=PADDING)
 
+        self.tabs["요청사항"] = RequestTab(self.tabview.tab("요청사항"), self.fonts)
+        self.tabs["요청사항"].pack(fill="both", expand=True)
+
     def _refresh_cart(self):
         self.tabs["장바구니"].cart = self.cart
-        self.tabs["장바구니"].reqs = self.cart_reqs
         self.tabs["장바구니"].refresh()
 
     def _show_main(self):
@@ -1123,89 +971,41 @@ class App(ctk.CTk):
         self.cart[item['name']] = qty
         self._refresh_cart()
 
-    def _on_cart_req_change(self, item, req_text):
-        self.cart_reqs[item['name']] = req_text
-
     def _on_cart_remove(self, item):
         if item['name'] in self.cart:
             del self.cart[item['name']]
-            if item['name'] in self.cart_reqs:
-                del self.cart_reqs[item['name']]
             self._show_toast(f"{item['name']} removed from cart.")
             self._refresh_cart()
 
     def _on_search(self):
+        # 메인 메뉴(전체메뉴)에서 이름으로 검색 기능 완성
+        # "추천" 탭에서 검색 버튼 클릭 시 호출됨
+        # self.tabs["추천"]의 search_entry에서 입력값을 받아 전체메뉴에서 이름으로 검색
         search_tab = self.tabs.get("추천")
         menu_tab = self.tabs.get("전체메뉴")
-        current_tab = self.tabview.get()
-        if current_tab == "추천":
-            if not search_tab:
-                return
-            keyword = search_tab.search_entry.get().strip()
-            # 추천 결과 리스트 초기화
-            for w in search_tab.result_list.winfo_children():
-                w.destroy()
-            from src.services.cocktail_service import CocktailService
-            service = CocktailService()
-            results = service.recommend_by_taste_ingredients(keyword, top_n=5)
-            if not results:
-                ctk.CTkLabel(search_tab.result_list, text="추천 결과가 없습니다.", font=self.fonts['item'], text_color=ERROR_COLOR).pack(pady=20)
-                return
-            for idx, item in enumerate(results, 1):
-                card = ctk.CTkFrame(search_tab.result_list, fg_color=CARD_COLOR, corner_radius=10, border_width=1, border_color="#333")
-                card.pack(fill="x", padx=12, pady=8)
-                ctk.CTkLabel(card, text=f"{idx}. 유사도: {item.get('similarity_score', 0):.3f}", font=self.fonts['small'], text_color=ACCENT_COLOR, anchor="w").pack(anchor="w", padx=8, pady=(8,2))
-                ctk.CTkLabel(card, text=f"칵테일명: {item.get('name','')}", font=self.fonts['item'], text_color=TEXT_COLOR, anchor="w").pack(anchor="w", padx=8, pady=2)
-                ctk.CTkLabel(card, text=f"재료: {item.get('ingredients','')}", font=self.fonts['item'], text_color="#bbbbbb", anchor="w", wraplength=420, justify="left").pack(anchor="w", padx=8, pady=2)
-                ctk.CTkLabel(card, text=f"일치 검색어: {' '.join(item.get('matching_keywords', []))}", font=self.fonts['small'], text_color=ACCENT_COLOR, anchor="w").pack(anchor="w", padx=8, pady=2)
-                ctk.CTkLabel(card, text=f"가격: {item.get('price','')}", font=self.fonts['item'], text_color=ACCENT_COLOR, anchor="w").pack(anchor="w", padx=8, pady=(2,8))
-        elif current_tab == "전체메뉴":
-            if not menu_tab:
-                return
-            keyword = menu_tab._search_var.get().strip()
-            if not keyword:
-                menu_tab._filtered_menus = menu_tab._all_menus.copy()
-            else:
-                kw = keyword.lower()
-                menu_tab._filtered_menus = [
-                    item for item in menu_tab._all_menus
-                    if kw in item['name'].lower()
-                ]
-            menu_tab._current_page = 0
-            menu_tab._draw_menu_list()
-            # 전체메뉴 탭에서만 탭 전환
-            self.tabview.set("전체메뉴")
-
-        # 추천 탭에서 검색 시 추천 결과 출력
-        if self.tabview.get() == "추천":
-            # 추천 결과 리스트 초기화
-            for w in search_tab.result_list.winfo_children():
-                w.destroy()
-            from src.services.cocktail_service import CocktailService
-            service = CocktailService()
-            results = service.recommend_by_taste_ingredients(keyword, top_n=5)
-            if not results:
-                ctk.CTkLabel(search_tab.result_list, text="추천 결과가 없습니다.", font=self.fonts['item'], text_color=ERROR_COLOR).pack(pady=20)
-                return
-            for idx, item in enumerate(results, 1):
-                card = ctk.CTkFrame(search_tab.result_list, fg_color=CARD_COLOR, corner_radius=10, border_width=1, border_color="#333")
-                card.pack(fill="x", padx=12, pady=8)
-                ctk.CTkLabel(card, text=f"{idx}. 유사도: {item.get('similarity_score', 0):.3f}", font=self.fonts['small'], text_color=ACCENT_COLOR, anchor="w").pack(anchor="w", padx=8, pady=(8,2))
-                ctk.CTkLabel(card, text=f"칵테일명: {item.get('name','')}", font=self.fonts['item'], text_color=TEXT_COLOR, anchor="w").pack(anchor="w", padx=8, pady=2)
-                ctk.CTkLabel(card, text=f"재료: {item.get('ingredients','')}", font=self.fonts['item'], text_color="#bbbbbb", anchor="w", wraplength=420, justify="left").pack(anchor="w", padx=8, pady=2)
-                ctk.CTkLabel(card, text=f"일치 검색어: {' '.join(item.get('matching_keywords', []))}", font=self.fonts['small'], text_color=ACCENT_COLOR, anchor="w").pack(anchor="w", padx=8, pady=2)
-                ctk.CTkLabel(card, text=f"가격: {item.get('price','')}", font=self.fonts['item'], text_color=ACCENT_COLOR, anchor="w").pack(anchor="w", padx=8, pady=(2,8))
+        if not search_tab or not menu_tab:
+            return
+        keyword = search_tab.search_entry.get().strip()
+        if not keyword:
+            # 검색어 없으면 전체 메뉴 보여주기
+            menu_tab._filtered_menus = menu_tab._all_menus.copy()
+        else:
+            kw = keyword.lower()
+            menu_tab._filtered_menus = [
+                item for item in menu_tab._all_menus
+                if kw in item['name'].lower()
+            ]
+        menu_tab._current_page = 0
+        menu_tab._draw_menu_list()
+        # 전체메뉴 탭으로 전환
+        self.tabview.set("전체메뉴")
 
     def _save_order_to_csv(self):
         order_service = OrderService()
         success = True
-        # 주문 시간 한 번만 생성
-        from datetime import datetime
-        order_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         for name, qty in self.cart.items():
-            req = self.cart_reqs.get(name, "")
-            # 주문 시간(order_time)을 전달
-            if not order_service.process_gui_order(name, qty, req, order_time=order_time):
+            # 주문 실패 시 success = False로
+            if not order_service.process_gui_order(name, qty):
                 success = False
         return success
 
@@ -1218,7 +1018,6 @@ class App(ctk.CTk):
         if result:
             self._show_toast("주문이 성공적으로 저장되었습니다!")
             self.cart.clear()
-            self.cart_reqs.clear()
             self._refresh_cart()
         else:
             self._show_toast("주문 저장에 실패했습니다.")
@@ -1239,69 +1038,19 @@ class App(ctk.CTk):
             sys.exit(0)
 
     def _show_admin(self):
-        # 관리자 모드 진입 시 인증 팝업
-        self._show_admin_login_popup()
-
-    def _show_admin_login_popup(self):
-        popup = ctk.CTkToplevel(self)
-        popup.title("관리자 로그인")
-        popup.geometry("340x220")
-        popup.resizable(False, False)
-        popup.grab_set()
-        popup.configure(bg=BG_COLOR)
-        popup.focus_force()
-        ctk.CTkLabel(popup, text="관리자 인증", font=ctk.CTkFont(size=18, weight="bold"), text_color=ACCENT_COLOR).pack(pady=(24, 4))
-        form = ctk.CTkFrame(popup, fg_color=CARD_COLOR, corner_radius=10)
-        form.pack(fill="x", padx=24, pady=(8, 16))
-        # 이름
-        ctk.CTkLabel(form, text="이름", font=self.fonts['item'], text_color=TEXT_COLOR, anchor="w").pack(anchor="w", padx=16, pady=(12, 2))
-        name_var = ctk.StringVar()
-        name_entry = ctk.CTkEntry(form, textvariable=name_var, font=self.fonts['item'])
-        name_entry.pack(fill="x", padx=16, pady=(0, 8))
-        name_entry.focus_set()
-        # 비밀번호
-        ctk.CTkLabel(form, text="비밀번호", font=self.fonts['item'], text_color=TEXT_COLOR, anchor="w").pack(anchor="w", padx=16, pady=(2, 2))
-        passwd_var = ctk.StringVar()
-        passwd_entry = ctk.CTkEntry(form, textvariable=passwd_var, font=self.fonts['item'], show="*")
-        passwd_entry.pack(fill="x", padx=16, pady=(0, 12))
-        # 엔터키로 로그인 시도
-        passwd_entry.bind("<Return>", lambda event: try_login())
-        name_entry.bind("<Return>", lambda event: try_login())
-        # 로그인 버튼
-        def try_login():
-            from src.db.admin import verify_admin
-            name = name_var.get().strip()
-            passwd = passwd_var.get().strip()
-            if not name or not passwd:
-                self._show_toast("이름과 비밀번호를 입력하세요.")
-                return
-            if verify_admin(name, passwd):
-                popup.destroy()
-                self.is_admin = True
-                self._show_toast("관리자 인증 성공! 관리자 모드로 진입합니다.")
-                # 탭뷰를 다시 생성하여 어드민 전용 탭만 보이게 함
-                self.main_frame.pack_forget()
-                self.tabview.destroy()
-                self.tabview = ctk.CTkTabview(
-                    self.main_frame,
-                    width=600,
-                    corner_radius=12,
-                    fg_color=BG_COLOR,
-                    segmented_button_fg_color="#444444",
-                    segmented_button_selected_color="#444444",
-                    segmented_button_unselected_color="#222",
-                    segmented_button_selected_hover_color="#444444",
-                    segmented_button_unselected_hover_color="#333"
-                )
-                self.tabview.pack(fill="both", expand=True, padx=PADDING, pady=PADDING)
-                self.tabs = {}
-                self._setup_tabs()
-                self._show_main()
-            else:
-                self._show_toast("인증 실패: 이름 또는 비밀번호가 올바르지 않습니다.")
-        ctk.CTkButton(form, text="확인", fg_color=ACCENT_COLOR, hover_color=SUCCESS_COLOR, corner_radius=6, font=self.fonts['item'], command=try_login).pack(pady=(8, 0))
-        # 닫기 버튼
-        ctk.CTkButton(popup, text="닫기", fg_color="#444444", corner_radius=6, width=80, font=ctk.CTkFont(size=13), command=popup.destroy).pack(pady=(8, 0))
+        # 관리자 모드 진입 시 사용자와 동일한 화면을 보여줌
+        self.is_admin = True
+        self._show_toast("Entering admin mode.")
+        # 탭뷰를 다시 생성하여 어드민 전용 탭만 보이게 함
+        # 기존 탭뷰와 탭 프레임들 제거
+        self.main_frame.pack_forget()
+        self.tabview.destroy()
+        self.tabview = ctk.CTkTabview(self.main_frame, width=600)
+        self.tabview.pack(fill="both", expand=True, padx=PADDING, pady=PADDING)
+        self.tabs = {}
+        self._setup_tabs()
+        self._show_main()
+        # 앞으로 관리자 전용 기능이 추가될 예정
 
 if __name__ == "__main__":
     try:
