@@ -15,6 +15,7 @@ from difflib import SequenceMatcher
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.db.conn import db_connect
+from src.db.cocktail import cocktail_select, coctail_insert, cockail_create
 
 
 class CocktailService:
@@ -24,40 +25,11 @@ class CocktailService:
         """
         self.conn = db_connect()
         self.cursor = self.conn.cursor()
-        self._ensure_cocktail_table()
-
-    def _ensure_cocktail_table(self):
-        """칵테일 테이블이 존재하는지 확인하고 없으면 생성합니다."""
-        create_table_query = """
-        CREATE TABLE IF NOT EXISTS Cocktail (
-            name TEXT PRIMARY KEY,
-            ingredients TEXT NOT NULL,
-            garnish TEXT,
-            glassware TEXT,
-            preparation TEXT,
-            price REAL NOT NULL,
-            note TEXT
-        );
-        """
-        self.cursor.execute(create_table_query)
-        self.conn.commit()
-
-    def _clean_ingredients(self, ingredients: str) -> str:
-        """재료 문자열을 정리합니다."""
-        if not ingredients:
-            return ""
-
-        # 불필요한 기호와 수량 제거, 소문자 변환
-        cleaned = re.sub(r'\d+\.?\d*\s*(oz|ml|dash|drops?|cup|tsp|tbsp)', '', ingredients.lower())
-        cleaned = re.sub(r'[,\n\r\*\-\+\(\)]', ' ', cleaned)
-        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
-        return cleaned
+        cockail_create()  # 이미 정의된 테이블 생성 함수 사용
 
     def get_all_cocktails(self) -> List[Dict]:
         """모든 칵테일을 반환합니다."""
-        query = "SELECT * FROM Cocktail"
-        self.cursor.execute(query)
-        rows = self.cursor.fetchall()
+        rows = cocktail_select()  # 이미 정의된 함수 사용
 
         cocktails = []
         for row in rows:
@@ -73,6 +45,17 @@ class CocktailService:
             cocktails.append(cocktail)
 
         return cocktails
+
+    def _clean_ingredients(self, ingredients: str) -> str:
+        """재료 문자열을 정리합니다."""
+        if not ingredients:
+            return ""
+
+        # 불필요한 기호와 수량 제거, 소문자 변환
+        cleaned = re.sub(r'\d+\.?\d*\s*(oz|ml|dash|drops?|cup|tsp|tbsp)', '', ingredients.lower())
+        cleaned = re.sub(r'[,\n\r\*\-\+\(\)]', ' ', cleaned)
+        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+        return cleaned
 
     def find_cocktail_by_name(self, name: str) -> Dict:
         """칵테일 이름으로 정확한 칵테일을 찾습니다."""
@@ -106,9 +89,7 @@ class CocktailService:
             추천 칵테일 리스트 (유사도 점수 및 매칭 키워드 포함)
         """
         # 모든 칵테일 가져오기
-        query = "SELECT * FROM Cocktail"
-        self.cursor.execute(query)
-        rows = self.cursor.fetchall()
+        rows = cocktail_select()  # 이미 정의된 함수 사용
 
         if not rows:
             return []
@@ -176,9 +157,7 @@ class CocktailService:
         query_lower = query.lower().strip()
 
         # 모든 칵테일 가져오기
-        sql_query = "SELECT * FROM Cocktail"
-        self.cursor.execute(sql_query)
-        rows = self.cursor.fetchall()
+        rows = cocktail_select()  # 이미 정의된 함수 사용
 
         fuzzy_matches = []
 
@@ -282,13 +261,7 @@ class CocktailService:
         새로운 칵테일을 추가합니다.
         """
         try:
-            query = """
-            INSERT INTO Cocktail (name, ingredients, garnish, glassware, preparation, price, note)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """
-            self.cursor.execute(query, (name, ingredients, garnish, glassware, preparation, price, note))
-            self.conn.commit()
-            return True
+            return coctail_insert(name, ingredients, garnish, glassware, preparation, price, note)
         except sqlite3.IntegrityError:
             # 이미 존재하는 칵테일 이름
             return False
@@ -330,6 +303,22 @@ def ingredient_search_demo():
         print("-" * 50)
 
         # 유사도 기반 칵테일 추천
+        # recommend_by_taste_ingredients 메서드는 다음과 같은 구조의 리스트를 반환:
+        # [
+        #     {
+        #         'name': '칵테일 이름 (str)',
+        #         'ingredients': '재료 목록 (str)',
+        #         'garnish': '가니쉬 정보 (str) 또는 "N/A"',
+        #         'glassware': '글라스웨어 정보 (str) 또는 "N/A"',
+        #         'preparation': '제조 방법 (str) 또는 "N/A"',
+        #         'price': '가격 정보 (str, 예: "$12.50") 또는 "N/A"',
+        #         'note': '추가 메모 (str) 또는 "N/A"',
+        #         'similarity_score': '유사도 점수 (float, 0.0~1.0)',
+        #         'matching_keywords': '매칭된 키워드 리스트 (list of str)'
+        #     },
+        #     ... (최대 top_n개, 여기서는 5개)
+        # ]
+        # 반환되는 리스트는 similarity_score 기준으로 내림차순 정렬됨
         recommendations = service.recommend_by_taste_ingredients(search_query, top_n=5)
 
         if not recommendations:
