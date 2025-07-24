@@ -50,4 +50,4 @@ def load_csv_to_sqlite(csv_path: str):
 
 
 
-load_csv_to_sqlite("cocktails.csv")
+load_csv_to_sqlite("../../data/cocktails.csv")
