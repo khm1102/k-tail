@@ -1,4 +1,4 @@
-from conn import db_connect
+from .conn import db_connect
 
 conn = db_connect()
 cur = conn.cursor()

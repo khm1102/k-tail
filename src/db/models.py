@@ -25,6 +25,20 @@ Create Table IF NOT Exists Admin(
 cur.execute(create_admin)
 
 """
+Select Admin
+"""
+
+def select_admin() -> list:
+    select_admin = """
+    select * from admin;
+    """
+    cur.execute(select_admin)
+    result = cur.fetchall()
+    return result
+
+
+
+"""
 Insert Admin (add)
 """
 
