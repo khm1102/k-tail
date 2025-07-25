@@ -89,14 +89,22 @@ class OrderService:
         order_date = order_time if order_time else datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(self.orders_csv_path, 'a', newline='', encoding='utf-8') as csvfile:
             writer = csv.writer(csvfile)
-            for _ in range(quantity):
-                writer.writerow([
-                    order_date,
-                    cocktail_name,
-                    ingredients,
-                    preparation if preparation else "",
-                    request if request else ""
-                ])
+            # 주문 정보 한 번만 기록 (수량 포함)
+            writer.writerow([order_date, cocktail_name, quantity])
+            # 재료 --로 구분
+            ingredient_list = [ing.strip() for ing in ingredients.split(',')]
+            for ingredient in ingredient_list:
+                if ingredient:
+                    writer.writerow([f"-- {ingredient}"])
+            # 레시피 --로 구분 (여러 줄일 수 있음)
+            if preparation:
+                for line in preparation.split('\n'):
+                    line = line.strip()
+                    if line:
+                        writer.writerow([f"-- {line}"])
+            # 요구사항 --로 구분, 한 번만
+            if request:
+                writer.writerow([f"-- 요구사항: {request}"])
         return True
 
     def __del__(self):

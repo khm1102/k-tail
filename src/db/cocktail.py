@@ -57,23 +57,44 @@ def coctail_insert(name, ingredients, garnish=None, glassware=None, preparation=
 
 """
 Coctail Update
+
+칵테일 정보 수정 함수
 """
 
-def coctail_update():
-  return 0
+def coctail_update(name, **kwargs):
+    """
+    칵테일 정보 수정 함수
+    name(필수) 외에 수정할 필드만 키워드 인자로 넘기면 됨.
+    예시: coctail_update("Mojito", price=15.0, note="신메뉴")
+    """
+    allowed_fields = ["ingredients", "garnish", "glassware", "preparation", "price", "note"]
+    fields = []
+    values = []
+    for key in allowed_fields:
+        if key in kwargs and kwargs[key] is not None:
+            fields.append(f"{key} = ?")
+            values.append(kwargs[key])
+    if not fields:
+        return False
+    query = f"UPDATE Cocktail SET {', '.join(fields)} WHERE name = ?"
+    values.append(name)
+    cur.execute(query, values)
+    conn.commit()
+    return True
 
 
 """
 Coctail Delete
+
+칵테일 삭제 함수
+name(필수): 삭제할 칵테일 이름
 """
 
-def coctail_delete():
-  return 0
-
-"""
-Coctail where
-"""
-
-def coctail_name_where(name : str):
-    query = """
+def coctail_delete(name):
     """
+    주어진 이름의 칵테일을 Cocktail 테이블에서 삭제합니다.
+    """
+    query = "DELETE FROM Cocktail WHERE name = ?"
+    cur.execute(query, (name,))
+    conn.commit()
+    return True

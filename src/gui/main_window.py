@@ -885,7 +885,7 @@ class MenuTab(ctk.CTkFrame):
             OrderDropdownCard(outer, {"order_id": idx, "order_time": order_time, "cocktails": cocktails}, self.fonts).pack(fill="x", padx=12, pady=6)
 
     def _load_orders_grouped(self):
-        # orders.csv에서 [order_time, name, ingredients, preparation, request] 읽어서 주문 시간별로 묶음
+        # orders.csv에서 [order_time, name] + --재료/레시피/요구사항 읽어서 주문 시간별로 묶음
         import os
         orders_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "orders.csv")
         grouped = {}
@@ -893,18 +893,52 @@ class MenuTab(ctk.CTkFrame):
             return []
         with open(orders_path, newline='', encoding='utf-8') as f:
             reader = csv.reader(f)
+            current_time = None
+            current_name = None
+            current_quantity = None
+            current_ingredients = []
+            current_recipe = []
+            current_request = ""
+            orders = []
             for row in reader:
-                if len(row) < 5:
+                if not row:
                     continue
-                order_time, name, ingredients, preparation, request = row[:5]
-                grouped.setdefault(order_time, []).append({
-                    "cocktail": name,
-                    "ingredients": ingredients,
-                    "recipe": preparation,
-                    "request": request
-                })
+                if not row[0].startswith("--"):  # 주문 헤더(시간, 칵테일명, 수량)
+                    # 이전 주문 저장
+                    if current_time and current_name:
+                        orders.append((current_time, [{
+                            "cocktail": current_name,
+                            "quantity": current_quantity,
+                            "ingredients": ", ".join(current_ingredients),
+                            "recipe": "\n".join(current_recipe),
+                            "request": current_request
+                        }]))
+                    # 새 주문 시작
+                    current_time = row[0]
+                    current_name = row[1] if len(row) > 1 else ""
+                    current_quantity = row[2] if len(row) > 2 else "1"
+                    current_ingredients = []
+                    current_recipe = []
+                    current_request = ""
+                else:
+                    content = row[0][2:].strip()
+                    if content.startswith("요구사항:"):
+                        current_request = content.replace("요구사항:", "").strip()
+                    elif any(word in content for word in ["oz", "bsp", "dash", "ml", "L", "piece", "float", "wheel", "wedge", "slice", "cup", "syrup", "juice", "bitters", "liqueur", "gin", "rum", "vodka", "whiskey", "tequila", "wine", "beer", "sugar", "lemon", "lime", "orange", "pineapple", "mint", "ice", "water", "soda", "cream", "egg", "honey", "salt", "pepper", "rosemary", "cherry", "apple", "grapefruit", "cinnamon", "vanilla", "coffee", "cocoa", "chocolate", "strawberry", "blueberry", "raspberry", "blackberry", "apricot", "pear", "peach", "melon", "banana", "passion", "apricot", "apricot", "apricot"]):
+                        current_ingredients.append(content)
+                    else:
+                        current_recipe.append(content)
+            # 마지막 주문 저장
+            if current_time and current_name:
+                orders.append((current_time, [{
+                    "cocktail": current_name,
+                    "quantity": current_quantity,
+                    "ingredients": ", ".join(current_ingredients),
+                    "recipe": "\n".join(current_recipe),
+                    "request": current_request
+                }]))
         # 최신 주문이 위로 오도록 정렬
-        return sorted(grouped.items(), key=lambda x: x[0], reverse=True)
+        return sorted(orders, key=lambda x: x[0], reverse=True)
 
 class OrderDropdownCard(ctk.CTkFrame):
     def __init__(self, parent, order, fonts):
@@ -952,9 +986,9 @@ class DropdownRequestCard(ctk.CTkFrame):
 
     def _build(self):
         # 펼침 없이 항상 보이게 (OrderDropdownCard에서만 드롭다운)
-        ctk.CTkLabel(self, text=f"{self.req['cocktail']}", font=self.fonts['item'], text_color=ACCENT_COLOR, anchor="w").pack(anchor="w", padx=8, pady=(4, 2))
+        qty_str = f" (수량: {self.req.get('quantity', '1')})" if self.req.get('quantity') else ""
+        ctk.CTkLabel(self, text=f"{self.req['cocktail']}{qty_str}", font=self.fonts['item'], text_color=ACCENT_COLOR, anchor="w").pack(anchor="w", padx=8, pady=(4, 2))
         ctk.CTkLabel(self, text=f"재료: {self.req['ingredients']}", font=self.fonts['item'], text_color=TEXT_COLOR, anchor="w", wraplength=440, justify="left").pack(anchor="w", padx=8, pady=(0, 2))
-        ctk.CTkLabel(self, text=f"레시피: {self.req['recipe']}", font=self.fonts['item'], text_color=TEXT_COLOR, anchor="w", wraplength=440, justify="left").pack(anchor="w", padx=8, pady=(0, 2))
         ctk.CTkLabel(self, text=f"요청사항: {self.req['request']}", font=self.fonts['item'], text_color=ACCENT_COLOR, anchor="w", wraplength=440, justify="left").pack(anchor="w", padx=8, pady=(0, 8))
 
 class SearchTab(ctk.CTkFrame):
@@ -1037,11 +1071,11 @@ class App(ctk.CTk):
         self.start_frame.pack(fill="both", expand=True)
 
     def _setup_tabs(self):
-        # 어드민 모드일 때는 추천, 검색 탭을 안보이게 한다
+        # 어드민 모드일 때는 추천, 검색, 장바구니, 요청사항 탭을 안보이게 한다
         if self.is_admin:
-            tab_names = ["전체메뉴", "장바구니", "요청사항"]
+            tab_names = ["전체메뉴"]
         else:
-            tab_names = ["인기", "전체메뉴", "추천", "장바구니"]
+            tab_names = ["인기", "추천", "전체메뉴", "장바구니"]
         for name in tab_names:
             self.tabview.add(name)
         # 기본 선택 탭
@@ -1070,17 +1104,18 @@ class App(ctk.CTk):
             self.tabs["추천"].pack(fill="both", expand=True)
 
         # 장바구니 탭: CartListTab에 콜백 전달 및 구매하기 버튼 포함
-        self.tabs["장바구니"] = CartListTab(
-            self.tabview.tab("장바구니"),
-            self.fonts,
-            self.cart,
-            on_qty_change=self._on_cart_qty_change,
-            on_remove=self._on_cart_remove,
-            on_purchase=self._on_purchase,
-            reqs=self.cart_reqs,
-            on_req_change=self._on_cart_req_change
-        )
-        self.tabs["장바구니"].pack(fill="both", expand=True, padx=PADDING, pady=PADDING)
+        if not self.is_admin:
+            self.tabs["장바구니"] = CartListTab(
+                self.tabview.tab("장바구니"),
+                self.fonts,
+                self.cart,
+                on_qty_change=self._on_cart_qty_change,
+                on_remove=self._on_cart_remove,
+                on_purchase=self._on_purchase,
+                reqs=self.cart_reqs,
+                on_req_change=self._on_cart_req_change
+            )
+            self.tabs["장바구니"].pack(fill="both", expand=True, padx=PADDING, pady=PADDING)
 
     def _refresh_cart(self):
         self.tabs["장바구니"].cart = self.cart
@@ -1225,10 +1260,41 @@ class App(ctk.CTk):
 
     # 관리자 모드에서 전체메뉴 상품 수정/삭제 콜백
     def _on_menu_edit(self, item):
-        self._show_toast(f"'{item['name']}' menu edit feature is not implemented yet.")
+        # 실제 DB 수정
+        try:
+            from src.db.cocktail import coctail_update
+            name = item['name']
+            price = None
+            desc = None
+            if 'price' in item:
+                # '$12.00' → 12.0
+                price = float(str(item['price']).replace('$','').replace(',',''))
+            if 'desc' in item:
+                desc = item['desc']
+            ok = coctail_update(name, price=price, note=desc)
+            if ok:
+                self._show_toast(f"'{name}' 메뉴가 수정되었습니다.")
+                self.tabs["전체메뉴"]._all_menus = self.tabs["전체메뉴"]._filtered_menus = self.tabs["전체메뉴"].cocktail_service.get_all_cocktails()
+                self.tabs["전체메뉴"]._draw_menu_list()
+            else:
+                self._show_toast(f"'{name}' 메뉴 수정 실패.")
+        except Exception as e:
+            self._show_toast(f"수정 오류: {e}")
 
     def _on_menu_delete(self, item):
-        self._show_toast(f"'{item['name']}' menu delete feature is not implemented yet.")
+        # 실제 DB 삭제
+        try:
+            from src.db.cocktail import coctail_delete
+            name = item['name']
+            ok = coctail_delete(name)
+            if ok:
+                self._show_toast(f"'{name}' 메뉴가 삭제되었습니다.")
+                self.tabs["전체메뉴"]._all_menus = self.tabs["전체메뉴"]._filtered_menus = self.tabs["전체메뉴"].cocktail_service.get_all_cocktails()
+                self.tabs["전체메뉴"]._draw_menu_list()
+            else:
+                self._show_toast(f"'{name}' 메뉴 삭제 실패.")
+        except Exception as e:
+            self._show_toast(f"삭제 오류: {e}")
 
     def _on_close(self):
         # 안전하게 종료
@@ -1245,41 +1311,50 @@ class App(ctk.CTk):
     def _show_admin_login_popup(self):
         popup = ctk.CTkToplevel(self)
         popup.title("관리자 로그인")
-        popup.geometry("340x220")
+        popup.geometry("400x320")
         popup.resizable(False, False)
         popup.grab_set()
         popup.configure(bg=BG_COLOR)
         popup.focus_force()
-        ctk.CTkLabel(popup, text="관리자 인증", font=ctk.CTkFont(size=18, weight="bold"), text_color=ACCENT_COLOR).pack(pady=(24, 4))
-        form = ctk.CTkFrame(popup, fg_color=CARD_COLOR, corner_radius=10)
-        form.pack(fill="x", padx=24, pady=(8, 16))
+        # 상단 아이콘과 타이틀
+        icon_label = ctk.CTkLabel(popup, text="🛡️", font=ctk.CTkFont(size=38), text_color=ACCENT_COLOR)
+        icon_label.pack(pady=(18, 0))
+        ctk.CTkLabel(popup, text="관리자 로그인", font=ctk.CTkFont(size=22, weight="bold"), text_color=ACCENT_COLOR).pack(pady=(2, 10))
+        form = ctk.CTkFrame(popup, fg_color=CARD_COLOR, corner_radius=18, border_width=0)
+        form.pack(fill="both", expand=True, padx=32, pady=(0, 18))
         # 이름
-        ctk.CTkLabel(form, text="이름", font=self.fonts['item'], text_color=TEXT_COLOR, anchor="w").pack(anchor="w", padx=16, pady=(12, 2))
+        ctk.CTkLabel(form, text="아이디", font=self.fonts['item'], text_color=TEXT_COLOR, anchor="w").pack(anchor="w", padx=18, pady=(18, 2))
         name_var = ctk.StringVar()
-        name_entry = ctk.CTkEntry(form, textvariable=name_var, font=self.fonts['item'])
-        name_entry.pack(fill="x", padx=16, pady=(0, 8))
+        name_entry = ctk.CTkEntry(form, textvariable=name_var, font=self.fonts['item'], placeholder_text="아이디를 입력하세요", corner_radius=10, border_width=2)
+        name_entry.pack(fill="x", padx=18, pady=(0, 10))
         name_entry.focus_set()
         # 비밀번호
-        ctk.CTkLabel(form, text="비밀번호", font=self.fonts['item'], text_color=TEXT_COLOR, anchor="w").pack(anchor="w", padx=16, pady=(2, 2))
+        ctk.CTkLabel(form, text="비밀번호", font=self.fonts['item'], text_color=TEXT_COLOR, anchor="w").pack(anchor="w", padx=18, pady=(2, 2))
         passwd_var = ctk.StringVar()
-        passwd_entry = ctk.CTkEntry(form, textvariable=passwd_var, font=self.fonts['item'], show="*")
-        passwd_entry.pack(fill="x", padx=16, pady=(0, 12))
+        passwd_entry = ctk.CTkEntry(form, textvariable=passwd_var, font=self.fonts['item'], show="*", placeholder_text="비밀번호를 입력하세요", corner_radius=10, border_width=2)
+        passwd_entry.pack(fill="x", padx=18, pady=(0, 18))
         # 엔터키로 로그인 시도
         passwd_entry.bind("<Return>", lambda event: try_login())
         name_entry.bind("<Return>", lambda event: try_login())
-        # 로그인 버튼
+        # 실패 안내 라벨
+        fail_label = ctk.CTkLabel(form, text="", font=self.fonts['small'], text_color=ERROR_COLOR)
+        fail_label.pack(pady=(0, 2))
+        # 버튼 영역 (form 바깥, 팝업 맨 아래)
+        btns = ctk.CTkFrame(popup, fg_color="transparent")
+        btns.pack(side="bottom", fill="x", pady=(10, 18))
         def try_login():
             from src.db.admin import verify_admin
             name = name_var.get().strip()
             passwd = passwd_var.get().strip()
             if not name or not passwd:
-                self._show_toast("이름과 비밀번호를 입력하세요.")
+                fail_label.configure(text="아이디와 비밀번호를 모두 입력하세요.")
+                name_entry.configure(border_color=ERROR_COLOR)
+                passwd_entry.configure(border_color=ERROR_COLOR)
                 return
             if verify_admin(name, passwd):
                 popup.destroy()
                 self.is_admin = True
                 self._show_toast("관리자 인증 성공! 관리자 모드로 진입합니다.")
-                # 탭뷰를 다시 생성하여 어드민 전용 탭만 보이게 함
                 self.main_frame.pack_forget()
                 self.tabview.destroy()
                 self.tabview = ctk.CTkTabview(
@@ -1298,10 +1373,9 @@ class App(ctk.CTk):
                 self._setup_tabs()
                 self._show_main()
             else:
-                self._show_toast("인증 실패: 이름 또는 비밀번호가 올바르지 않습니다.")
-        ctk.CTkButton(form, text="확인", fg_color=ACCENT_COLOR, hover_color=SUCCESS_COLOR, corner_radius=6, font=self.fonts['item'], command=try_login).pack(pady=(8, 0))
-        # 닫기 버튼
-        ctk.CTkButton(popup, text="닫기", fg_color="#444444", corner_radius=6, width=80, font=ctk.CTkFont(size=13), command=popup.destroy).pack(pady=(8, 0))
+                fail_label.configure(text="로그인 실패: 아이디 또는 비밀번호가 올바르지 않습니다.")
+                name_entry.configure(border_color=ERROR_COLOR)
+                passwd_entry.configure(border_color=ERROR_COLOR)
 
 if __name__ == "__main__":
     try:
